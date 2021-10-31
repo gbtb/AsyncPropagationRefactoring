@@ -10,20 +10,25 @@ namespace AsyncPropagation
 {
     public class ToAsyncMethodRewriter: CSharpSyntaxRewriter
     {
+        private readonly SyntaxNode? _startMethodSyntaxNode;
         private bool _doRewrite;
         private readonly bool _useConfigureAwait = false;
         private readonly bool _ensureAsyncPostfix = true;
         private readonly List<SyntaxNode> _invocationsToRewrite;
         private readonly List<SyntaxNode> _methodDeclarationsToRewrite;
 
-        public ToAsyncMethodRewriter(SyntaxNode oldDocRoot, IEnumerable<(Location Location, SymbolCallerInfo SymbolCallerInfo)> methodsToRewrite)
+        public ToAsyncMethodRewriter(SyntaxNode oldDocRoot,
+            IEnumerable<(Location Location, SymbolCallerInfo SymbolCallerInfo)> methodsToRewrite,
+            SyntaxNode? startMethodSyntaxNode)
         {
+            _startMethodSyntaxNode = startMethodSyntaxNode;
             _invocationsToRewrite = new List<SyntaxNode>();
             _methodDeclarationsToRewrite = new List<SyntaxNode>();
             foreach (var method in methodsToRewrite)
             {
                 _methodDeclarationsToRewrite.Add(oldDocRoot.FindNode(method.Location.SourceSpan));
-                _invocationsToRewrite.AddRange(method.SymbolCallerInfo.Locations.Select(inv => oldDocRoot.FindNode(inv.SourceSpan).Parent));
+                _invocationsToRewrite.AddRange(method.SymbolCallerInfo.Locations
+                    .Select(inv => oldDocRoot.FindNode(inv.SourceSpan).Ancestors().First(node => node.Kind() == SyntaxKind.InvocationExpression)));
             }
         }
 
@@ -32,15 +37,24 @@ namespace AsyncPropagation
             return syntaxNodes.Find(n => n.IsEquivalentTo(node)) != null;
         }
         
-        public override SyntaxNode VisitMethodDeclaration(MethodDeclarationSyntax node)
+        public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax node)
         {
-            if (!CheckNodeIsInList(_methodDeclarationsToRewrite, node))
+            var isStartMethod = _startMethodSyntaxNode?.IsEquivalentTo(node) == true;
+            if (!CheckNodeIsInList(_methodDeclarationsToRewrite, node) && !isStartMethod)
                 return base.VisitMethodDeclaration(node);
 
+            if (isStartMethod)
+                return RewriteStartMethodDeclaration(node);
+            
             if (!node.Modifiers.Any(SyntaxKind.AsyncKeyword))
                 node = RewriteMethodSignature(node);
 
             return base.VisitMethodDeclaration(node);
+        }
+
+        private SyntaxNode RewriteStartMethodDeclaration(MethodDeclarationSyntax node)
+        {
+            return node.WithIdentifier(GetMethodName(node));
         }
 
         private MethodDeclarationSyntax RewriteMethodSignature(MethodDeclarationSyntax methodDeclaration)
@@ -76,7 +90,7 @@ namespace AsyncPropagation
                 return methodDeclaration.Identifier;
         }
 
-        public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
+        public override SyntaxNode? VisitInvocationExpression(InvocationExpressionSyntax node)
         {
             if (!CheckNodeIsInList(_invocationsToRewrite, node))
                 return base.VisitInvocationExpression(node);
@@ -86,7 +100,7 @@ namespace AsyncPropagation
             _doRewrite = true;
             var newExpression = this.Visit(node.Expression);
             _doRewrite = false;
-            var newCallSite = node.WithLeadingTrivia(Space).WithExpression((ExpressionSyntax)newExpression);
+            var newCallSite = node.WithoutLeadingTrivia().WithExpression((ExpressionSyntax)newExpression);
             
             //todo: support passing tasks without awaiting, if containing method already does so
             var awaitCall = _useConfigureAwait ? InvocationWithConfigureAwait(newCallSite, leadingTrivia) : InvocationWithAwait(newCallSite, leadingTrivia);
@@ -97,7 +111,8 @@ namespace AsyncPropagation
         private SyntaxNode InvocationWithAwait(InvocationExpressionSyntax newCallSite, SyntaxTriviaList leadingTrivia)
         {
             return AwaitExpression(newCallSite)
-                .WithAwaitKeyword(Token(leadingTrivia, SyntaxKind.AwaitKeyword, TriviaList(Space)));
+                .WithAwaitKeyword(Token(TriviaList(Space), SyntaxKind.AwaitKeyword, TriviaList(Space)))
+            .WithLeadingTrivia(leadingTrivia);
         }
 
         private SyntaxNode InvocationWithConfigureAwait(ExpressionSyntax newCallSite, SyntaxTriviaList leadingTrivia)
@@ -115,26 +130,26 @@ namespace AsyncPropagation
                 );
         }
 
-        public override SyntaxNode VisitMemberBindingExpression(MemberBindingExpressionSyntax node)
+        public override SyntaxNode? VisitMemberBindingExpression(MemberBindingExpressionSyntax node)
         {
             if (!_doRewrite || !_ensureAsyncPostfix || node.Name.ToString().EndsWith("Async"))
-                return node;
+                return base.VisitMemberBindingExpression(node);
             
             return node.WithName(IdentifierName(node.Name + "Async"));
         }
 
-        public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
+        public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node)
         {
             if (!_doRewrite || !_ensureAsyncPostfix || node.Identifier.Text.EndsWith("Async"))
-                return node;
+                return base.VisitIdentifierName(node);
             
             return node.WithIdentifier(Identifier(node.Identifier.Text + "Async"));
         }
 
-        public override SyntaxNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
+        public override SyntaxNode? VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
         {
             if (!_doRewrite || !_ensureAsyncPostfix || node.Name.ToString().EndsWith("Async"))
-                return node;
+                return base.VisitMemberAccessExpression(node);
             
             return node.WithName(IdentifierName(node.Name + "Async"));
         }

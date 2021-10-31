@@ -1,11 +1,8 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.Diagnostics;
-using Microsoft.CodeAnalysis.Text;
 using NUnit.Framework;
 using RoslynTestKit;
 using VerifyCS = AsyncPropagation.Test.CSharpCodeFixVerifier<
@@ -40,7 +37,7 @@ namespace AsyncPropagation.Test
             var expected = @"
             public class Test {
 
-                public async Task InnerMethod()
+                public async Task InnerMethodAsync()
                 {
                 }
 
@@ -85,7 +82,7 @@ namespace AsyncPropagation.Test
             var expected = @"
             public class Test {
 
-                public async Task InnerMethod()
+                public async Task InnerMethodAsync()
                 {
                 }
 
@@ -103,6 +100,48 @@ namespace AsyncPropagation.Test
                         await InnerMethodAsync();
                     }
                     
+                }
+            }
+            ";
+            
+            TestCodeFix(source, expected, _diagId);
+        }
+        
+        [Test]
+        public void Test_WithInterface()
+        {
+            var source = @"
+            public class Test {
+
+                public async Task [|InnerMethod|]()
+                {
+                }
+            }
+            public interface IFoo {
+                void Bar();
+            }
+
+            public class Foo: IFoo {
+                public void Bar(){
+                    new Test().InnerMethod();
+                }
+            }
+            ";
+            
+            var expected = @"
+            public class Test {
+
+                public async Task InnerMethodAsync()
+                {
+                }
+            }
+            public interface IFoo {
+                Task BarAsync();
+            }
+
+            public class Foo: IFoo {
+                public async Task BarAsync(){
+                    await new Test().InnerMethodAsync();
                 }
             }
             ";

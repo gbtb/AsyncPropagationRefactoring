@@ -8,7 +8,8 @@ namespace AsyncPropagation
 {
     public class ToAsyncInvocationCodefix
     {
-        public async Task<Solution> ExecuteAsync(Solution solution, IEnumerable<SymbolCallerInfo> methodsToRewrite)
+        public async Task<Solution> ExecuteAsync(Solution solution, IMethodSymbol startMethod,
+            IEnumerable<SymbolCallerInfo> methodsToRewrite)
         {
             //group types by doc because multiple methods can be declared in same file, and we need to do all changes in one pass
             var solution1 = solution;
@@ -19,6 +20,9 @@ namespace AsyncPropagation
                     return (Location: callingSyntax.GetLocation(), SymbolCallerInfo: p);
                 }).GroupBy(t => solution1.GetDocument(t.Location.SourceTree));
 
+            var startMethodSyntaxNode = startMethod.DeclaringSyntaxReferences[0].GetSyntax();
+            var startMethodDoc = solution1.GetDocument(startMethodSyntaxNode.SyntaxTree);
+            
             foreach (var group in groupByDoc)
             {
                 var oldSolutionDoc = group.Key;
@@ -27,7 +31,7 @@ namespace AsyncPropagation
                     //_logger.LogError("Failed to find docs for some symbols location: {Symbols}", "TODO");
                     continue;
                 }
-                
+
                 var oldDocRoot = await oldSolutionDoc.GetSyntaxRootAsync();
                 if (oldDocRoot == null)
                 {
@@ -35,7 +39,7 @@ namespace AsyncPropagation
                     continue;
                 }
 
-                var rewriter = new ToAsyncMethodRewriter(oldDocRoot, group);
+                var rewriter = new ToAsyncMethodRewriter(oldDocRoot, group, startMethodDoc?.Id == oldSolutionDoc.Id ? startMethodSyntaxNode : null);
                 var newSolutionDoc = solution.GetDocument(oldSolutionDoc.Id);
                 var newSolutionRoot = await newSolutionDoc.GetSyntaxRootAsync();
                 

@@ -42,7 +42,7 @@ namespace AsyncPropagation
                     context.RegisterCodeFix(
                         CodeAction.Create(
                             title: CodeFixResources.CodeFixTitle,
-                            createChangedSolution: c => codeFix.ExecuteAsync(solution, callerInfos),
+                            createChangedSolution: c => codeFix.ExecuteAsync(solution, methodSymbol, callerInfos),
                             equivalenceKey: nameof(CodeFixResources.CodeFixTitle)),
                         diagnostic);
             }
