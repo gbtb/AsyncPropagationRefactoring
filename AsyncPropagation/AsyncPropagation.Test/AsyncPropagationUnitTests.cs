@@ -8,19 +8,6 @@ using RoslynTestKit;
 
 namespace AsyncPropagation.Test
 {
-    public interface IFoo
-    {
-        void A();
-    }
-
-    public class Foo : IFoo
-    {
-        public void A()
-        {
-            
-        }
-    }
-    
     [TestFixture]
     public class AsyncPropagationUnitTest: CodeFixTestFixture
     {

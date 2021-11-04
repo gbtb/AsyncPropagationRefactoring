@@ -50,12 +50,12 @@ namespace AsyncPropagation
             }
         }
 
-        private static async Task<List<SymbolCallerInfo>> GetMethodCallsAsync(Solution solution, IMethodSymbol startMethod,
+        private static async Task<List<ILocation>> GetMethodCallsAsync(Solution solution, IMethodSymbol startMethod,
             CancellationToken contextCancellationToken)
         {
             var visited = new HashSet<IMethodSymbol>();
             var methods = new Stack<IMethodSymbol>();
-            var callerInfos = new List<SymbolCallerInfo>();
+            var callerInfos = new List<ILocation>();
             methods.Push(startMethod);
             
             while (methods.Count > 0)
@@ -70,12 +70,11 @@ namespace AsyncPropagation
                 foreach (var referencer in finds)
                 {
                     var callingMethodSymbol = (IMethodSymbol)referencer.CallingSymbol;
-
-                    //callingMethodSymbol.DeclaringSyntaxReferences[0].Get
-                    var doc = solution.GetDocument(referencer.Locations.First().SourceTree);
-                    var model = await doc.GetSemanticModelAsync(contextCancellationToken);
-                    var baseMembers = model.LookupBaseMembers(referencer.Locations.First().SourceSpan.Start)
-                        .Where(s => !s.IsExtern);
+                    if (callingMethodSymbol.IsOverride)
+                    {
+                        var overridenMethods = CollectOverridenMethods(callingMethodSymbol.OverriddenMethod);
+                        callerInfos.AddRange(overridenMethods);
+                    }
                     
                     // Push the method overriden
                     var methodOverride = callingMethodSymbol;
@@ -90,13 +89,31 @@ namespace AsyncPropagation
                         continue;
                     }
                     
-                    callerInfos.Add(referencer);
+                    callerInfos.AddRange(referencer.Locations.Select(l => new CallLocation(l)));
+                    callerInfos.AddRange(referencer.CallingSymbol.DeclaringSyntaxReferences.Select(l => new MethodLocation(l.SyntaxTree.GetLocation(l.Span))));
                     // if (callingMethodSymbol.IsAsync || callingMethodSymbol.ReturnType.ContainingNamespace.ToDisplayString() == "System.Threading.Tasks")
                     //     continue;
                 }
             }
 
             return callerInfos;
+        }
+
+        private static IEnumerable<ILocation> CollectOverridenMethods(IMethodSymbol overriddenMethod)
+        {
+            do
+            {
+                foreach (var syntaxReference in overriddenMethod.DeclaringSyntaxReferences)
+                {
+                    yield return new MethodLocation(
+                        syntaxReference.SyntaxTree.GetLocation(syntaxReference.Span));
+                }
+
+#pragma warning disable 8600
+                overriddenMethod = overriddenMethod.OverriddenMethod;
+#pragma warning restore 8600
+            } while (overriddenMethod != null);
+            
         }
 
         // private Task<Solution> PropagateAsyncToCallingMethods(Solution solution, GraphResults graphResults, IMethodSymbol startMethod, CancellationToken c)
