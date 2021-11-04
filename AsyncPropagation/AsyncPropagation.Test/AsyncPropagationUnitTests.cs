@@ -5,12 +5,22 @@ using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.Diagnostics;
 using NUnit.Framework;
 using RoslynTestKit;
-using VerifyCS = AsyncPropagation.Test.CSharpCodeFixVerifier<
-    AsyncPropagation.AsyncPropagationAnalyzer,
-    AsyncPropagation.AsyncPropagationCodeFixProvider>;
 
 namespace AsyncPropagation.Test
 {
+    public interface IFoo
+    {
+        void A();
+    }
+
+    public class Foo : IFoo
+    {
+        public void A()
+        {
+            
+        }
+    }
+    
     [TestFixture]
     public class AsyncPropagationUnitTest: CodeFixTestFixture
     {
@@ -123,6 +133,56 @@ namespace AsyncPropagation.Test
 
             public class Foo: IFoo {
                 public void Bar(){
+                    new Test().InnerMethod();
+                }
+            }
+            ";
+            
+            var expected = @"
+            public class Test {
+
+                public async Task InnerMethodAsync()
+                {
+                }
+            }
+            public interface IFoo {
+                Task BarAsync();
+            }
+
+            public class Foo: IFoo {
+                public async Task BarAsync(){
+                    await new Test().InnerMethodAsync();
+                }
+            }
+            ";
+            
+            TestCodeFix(source, expected, _diagId);
+        }
+        
+        
+        [Test]
+        public void Test_WithBaseClass()
+        {
+            var source = @"
+            public class Test {
+
+                public async Task [|InnerMethod|]()
+                {
+                }
+            }
+            public abstract class Foo2 {
+                public abstract void Bar();
+            }
+
+            public class Foo1: Foo2 {
+                public override void Bar()
+                {
+                    
+                }
+            }
+
+            public class Foo: Foo1 {
+                public override void Bar(){
                     new Test().InnerMethod();
                 }
             }

@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Composition;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
@@ -24,6 +25,7 @@ namespace AsyncPropagation
             get { return ImmutableArray.Create(AsyncPropagationAnalyzer.DiagnosticId); }
         }
 
+        
         public sealed override async Task RegisterCodeFixesAsync(CodeFixContext context)
         {
             var solution = context.Document.Project.Solution;
@@ -48,7 +50,6 @@ namespace AsyncPropagation
             }
         }
 
-
         private static async Task<List<SymbolCallerInfo>> GetMethodCallsAsync(Solution solution, IMethodSymbol startMethod,
             CancellationToken contextCancellationToken)
         {
@@ -66,11 +67,16 @@ namespace AsyncPropagation
                 }
 
                 var finds = await SymbolFinder.FindCallersAsync(method, solution, contextCancellationToken);
-                foreach (var referencer in finds.Where(f => f.IsDirect))
+                foreach (var referencer in finds)
                 {
                     var callingMethodSymbol = (IMethodSymbol)referencer.CallingSymbol;
-                    methods.Push(callingMethodSymbol);
 
+                    //callingMethodSymbol.DeclaringSyntaxReferences[0].Get
+                    var doc = solution.GetDocument(referencer.Locations.First().SourceTree);
+                    var model = await doc.GetSemanticModelAsync(contextCancellationToken);
+                    var baseMembers = model.LookupBaseMembers(referencer.Locations.First().SourceSpan.Start)
+                        .Where(s => !s.IsExtern);
+                    
                     // Push the method overriden
                     var methodOverride = callingMethodSymbol;
                     while (methodOverride != null && methodOverride.IsOverride && methodOverride.OverriddenMethod != null)
