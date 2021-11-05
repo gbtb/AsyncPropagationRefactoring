@@ -182,12 +182,19 @@ namespace AsyncPropagation.Test
                 {
                 }
             }
-            public interface IFoo {
-                Task BarAsync();
+            public abstract class Foo2 {
+                public abstract Task BarAsync();
             }
 
-            public class Foo: IFoo {
-                public async Task BarAsync(){
+            public class Foo1: Foo2 {
+                public override Task BarAsync()
+                {
+                    
+                }
+            }
+
+            public class Foo: Foo1 {
+                public override Task BarAsync(){
                     await new Test().InnerMethodAsync();
                 }
             }

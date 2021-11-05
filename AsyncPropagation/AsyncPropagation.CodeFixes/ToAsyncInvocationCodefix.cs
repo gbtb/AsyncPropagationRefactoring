@@ -14,47 +14,45 @@ namespace AsyncPropagation
         private readonly bool _useConfigureAwait;
         private readonly bool _ensureAsyncPostfix = true;
 
-        public async Task<Solution> ExecuteAsync(Solution solution, IMethodSymbol startMethod,
-            List<ILocation> locations)
+        public async Task<Solution> ExecuteAsync(Solution solution, HashSet<INodeToChange<SyntaxNode>> locations)
         {
             //group types by doc because multiple methods can be declared in same file, and we need to do all changes in one pass
             var solution1 = solution;
             var groupByDoc = locations
-                .GroupBy(l => solution1.GetDocument(l.Location.SourceTree));
-
-            var startMethodSyntaxNode = startMethod.DeclaringSyntaxReferences[0].GetSyntax();
-            var startMethodDoc = solution1.GetDocument(startMethodSyntaxNode.SyntaxTree);
+                .GroupBy(l => l.Doc);
 
             foreach (var group in groupByDoc)
             {
                 var doc = group.Key;
-                var tree = await doc.GetSyntaxTreeAsync();
-                var root = tree.GetRoot();
+                //var tree = await doc.GetSyntaxTreeAsync();
+                //var root = tree.GetRoot();
 
+                var root = await group.First().Node.SyntaxTree.GetRootAsync();
+                
                 List<(SyntaxNode OldNode, SyntaxNode NewNode)> replacePairs =
                     new List<(SyntaxNode oldNode, SyntaxNode newNode)>();
 
-                var lookup = group.ToLookup(l => l is MethodSignatureLocation);
-                
+                var lookup = group.ToLookup(l => l is MethodSignature);
+
+                root = root.TrackNodes(group.Select(n => n.Node));
                 foreach (var methodDeclarationLoc  in lookup[true])
                 {
-                    var oldMethodSyntaxTree = root.FindNode(methodDeclarationLoc.Location.SourceSpan)
-                        .AncestorsAndSelf()
-                        .OfType<MethodDeclarationSyntax>().First();
+                    var oldMethodSyntaxTree =
+                        root.GetCurrentNode((methodDeclarationLoc as MethodSignature)!.Node);
 
                     var callsToRewrite = lookup[false]
-                        .Where(n => oldMethodSyntaxTree.FullSpan.Contains(n.Location.SourceSpan))
-                        .Select(n => oldMethodSyntaxTree.FindNode(n.Location.SourceSpan)
-                            .AncestorsAndSelf()
-                            .OfType<InvocationExpressionSyntax>().First()
-                        );
+                        .OfType<MethodCall>()
+                        .Where(call => root.GetCurrentNode(call.ContainingMethod) == oldMethodSyntaxTree)
+                        .Select(call => call.Node)
+                        .ToList();
 
                     var newMethodSyntaxTree = oldMethodSyntaxTree;
                     foreach (var call in callsToRewrite)
                     {
-                        var awaitCall = _useConfigureAwait ? InvocationWithConfigureAwait(call, call.GetLeadingTrivia()) 
-                            : InvocationWithAwait(call, call.GetLeadingTrivia());
-                        newMethodSyntaxTree = newMethodSyntaxTree.ReplaceNode(call, awaitCall);
+                        var trackedCall = newMethodSyntaxTree.GetCurrentNode(call);
+                        var awaitCall = _useConfigureAwait ? InvocationWithConfigureAwait(trackedCall, trackedCall.GetLeadingTrivia()) 
+                            : InvocationWithAwait(trackedCall, trackedCall.GetLeadingTrivia());
+                        newMethodSyntaxTree = newMethodSyntaxTree.ReplaceNode(trackedCall, awaitCall);
                     }
                     
                     newMethodSyntaxTree = RewriteMethodSignature(newMethodSyntaxTree);
@@ -108,7 +106,8 @@ namespace AsyncPropagation
                 asyncReturnType = IdentifierName("Task").WithTrailingTrivia(Space);
             }
             else if ((methodDeclaration.ReturnType is IdentifierNameSyntax identifierNameSyntax && identifierNameSyntax.ToString() != "Task")
-                     || (methodDeclaration.ReturnType is GenericNameSyntax genericNameSyntax && genericNameSyntax.Identifier.ToString() != "Task"))
+                     || (methodDeclaration.ReturnType is GenericNameSyntax genericNameSyntax && genericNameSyntax.Identifier.ToString() != "Task")
+                     || methodDeclaration.ReturnType is PredefinedTypeSyntax)
             {
                 var trailingTrivia = methodDeclaration.ReturnType.GetTrailingTrivia();
 

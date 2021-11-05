@@ -44,37 +44,41 @@ namespace AsyncPropagation
                     context.RegisterCodeFix(
                         CodeAction.Create(
                             title: CodeFixResources.CodeFixTitle,
-                            createChangedSolution: c => codeFix.ExecuteAsync(solution, methodSymbol, callerInfos),
+                            createChangedSolution: c => codeFix.ExecuteAsync(solution, callerInfos),
                             equivalenceKey: nameof(CodeFixResources.CodeFixTitle)),
                         diagnostic);
             }
         }
 
-        private static async Task<List<ILocation>> GetMethodCallsAsync(Solution solution, IMethodSymbol startMethod,
+        private static async Task<HashSet<INodeToChange<SyntaxNode>>> GetMethodCallsAsync(Solution solution, IMethodSymbol startMethod,
             CancellationToken contextCancellationToken)
         {
-            var visited = new HashSet<IMethodSymbol>();
+            //var visited = new HashSet<IMethodSymbol>();
             var methods = new Stack<IMethodSymbol>();
-            var callerInfos = new List<ILocation>();
+            var callerInfos = new HashSet<INodeToChange<SyntaxNode>>();
             methods.Push(startMethod);
-            callerInfos.AddRange(startMethod.DeclaringSyntaxReferences.Select(r => new MethodSignatureLocation(r.SyntaxTree.GetLocation(r.Span))));
+            var startMethodDeclaration =
+                await Task.WhenAll(startMethod.DeclaringSyntaxReferences.Select(reference =>
+                    CreateMethodSignature(reference, solution)));
+            callerInfos.AddRange(startMethodDeclaration);
             
             while (methods.Count > 0)
             {
                 var method = methods.Pop();
-                if (!visited.Add(method))
-                {
-                    continue;
-                }
+                // if (!visited.Add(method))
+                // {
+                //     continue;
+                // }
 
                 var finds = await SymbolFinder.FindCallersAsync(method, solution, contextCancellationToken);
                 foreach (var referencer in finds)
                 {
                     var callingMethodSymbol = (IMethodSymbol)referencer.CallingSymbol;
+                    methods.Push(callingMethodSymbol);
                     if (callingMethodSymbol.IsOverride)
                     {
-                        var overridenMethods = CollectOverridenMethods(callingMethodSymbol.OverriddenMethod);
-                        callerInfos.AddRange(overridenMethods);
+                        //var overridenMethods = CollectOverridenMethods(callingMethodSymbol.OverriddenMethod);
+                        //callerInfos.AddRange(overridenMethods);
                     }
                     
                     // Push the method overriden
@@ -90,8 +94,14 @@ namespace AsyncPropagation
                         continue;
                     }
                     
-                    callerInfos.AddRange(referencer.Locations.Select(l => new CallLocation(l)));
-                    callerInfos.AddRange(referencer.CallingSymbol.DeclaringSyntaxReferences.Select(l => new MethodSignatureLocation(l.SyntaxTree.GetLocation(l.Span))));
+                    var methodDeclarations =
+                        await Task.WhenAll(referencer.CallingSymbol.DeclaringSyntaxReferences.Select(reference =>
+                            CreateMethodSignature(reference, solution)));
+                    callerInfos.AddRange(methodDeclarations);
+                    var methodCalls = await Task.WhenAll(referencer.Locations.Select(l =>
+                        CreateMethodCall(solution, methodDeclarations.Select(m => m.Node), l))
+                    );
+                    callerInfos.AddRange(methodCalls);
                     // if (callingMethodSymbol.IsAsync || callingMethodSymbol.ReturnType.ContainingNamespace.ToDisplayString() == "System.Threading.Tasks")
                     //     continue;
                 }
@@ -100,22 +110,66 @@ namespace AsyncPropagation
             return callerInfos;
         }
 
-        private static IEnumerable<ILocation> CollectOverridenMethods(IMethodSymbol overriddenMethod)
+        private static async Task<MethodCall> CreateMethodCall(Solution solution, IEnumerable<MethodDeclarationSyntax> methodDeclarations, Location location)
         {
-            do
-            {
-                foreach (var syntaxReference in overriddenMethod.DeclaringSyntaxReferences)
-                {
-                    yield return new MethodSignatureLocation(
-                        syntaxReference.SyntaxTree.GetLocation(syntaxReference.Span));
-                }
+            var doc = solution.GetDocument(location.SourceTree);
+            if (doc == null)
+                return MethodCall.NullObject;
 
-#pragma warning disable 8600
-                overriddenMethod = overriddenMethod.OverriddenMethod;
-#pragma warning restore 8600
-            } while (overriddenMethod != null);
+            var root = await doc.GetSyntaxRootAsync();
+            if (root == null)
+                return MethodCall.NullObject;
+                    
+            var invocation = methodDeclarations.Where(decl => decl.FullSpan.Contains(location.SourceSpan))
+            .Select(decl => (decl.FindNode(location.SourceSpan)
+                .AncestorsAndSelf()
+                .OfType<InvocationExpressionSyntax>().First(), decl)
+            ).FirstOrDefault();
             
+            if (invocation.Item1 == null)
+                return MethodCall.NullObject;
+
+            return new MethodCall(doc, invocation.Item1, invocation.decl);
         }
+
+
+        private static async Task<MethodSignature> CreateMethodSignature(SyntaxReference reference, Solution solution)
+        {
+            var location = reference.SyntaxTree.GetLocation(reference.Span);
+            var doc = solution.GetDocument(location.SourceTree);
+            if (doc == null)
+                return MethodSignature.NullObject;
+
+            var root = await doc.GetSyntaxRootAsync();
+            if (root == null)
+                return MethodSignature.NullObject;
+            
+            var node = root.FindNode(location.SourceSpan)
+                .AncestorsAndSelf()
+                .OfType<MethodDeclarationSyntax>().First();
+            
+            if (node == null)
+                return MethodSignature.NullObject;
+            
+            return new MethodSignature(doc, node);
+        }
+
+//         private static IEnumerable<ILocation> CollectOverridenMethods(IMethodSymbol overriddenMethod)
+//         {
+//             do
+//             {
+//                 foreach (var syntaxReference in overriddenMethod.DeclaringSyntaxReferences)
+//                 {
+//                     yield return new MethodSignature(
+//                         syntaxReference.SyntaxTree.GetLocation(syntaxReference.Span));
+//                 }
+//
+// #pragma warning disable 8600
+//                 overriddenMethod = overriddenMethod.OverriddenMethod;
+// #pragma warning restore 8600
+//             } while (overriddenMethod != null);
+//             
+//         }
 
         // private Task<Solution> PropagateAsyncToCallingMethods(Solution solution, GraphResults graphResults, IMethodSymbol startMethod, CancellationToken c)
         // {
