@@ -63,19 +63,23 @@ namespace AsyncPropagation
                 var method = methods.Pop();
                 var methodDeclaration =
                     await Task.WhenAll(method.DeclaringSyntaxReferences.Select(reference =>
-                        CreateMethodSignature(reference, solution)));
+                        CreateMethodSignature(reference, solution, method.ContainingType.IsAbstract)));
                 callerInfos.AddRange(methodDeclaration);
 
                 var finds = await SymbolFinder.FindCallersAsync(method, solution, contextCancellationToken);
                 foreach (var referencer in finds)
                 {
                     var callingMethodSymbol = (IMethodSymbol)referencer.CallingSymbol;
-                    methods.Push(callingMethodSymbol);
-                    if (callingMethodSymbol.IsOverride)
-                    {
+                    if (!callingMethodSymbol.IsAsync && callingMethodSymbol.ReturnType.ContainingNamespace.ToDisplayString() != "System.Threading.Tasks")
+                        methods.Push(callingMethodSymbol);
+
+                    var probableInterfaces = callingMethodSymbol.ContainingType
+                        .AllInterfaces.Where(interf => interf.MemberNames.Contains(callingMethodSymbol.Name));
+                    
+                    callerInfos.AddRange(await CollectInterfaceMethodsDeclarations(solution, probableInterfaces, callingMethodSymbol));
+                    
+                    //var impl = callingMethodSymbol.ContainingType.FindImplementationForInterfaceMember(callingMethodSymbol);
                         //var overridenMethods = CollectOverridenMethods(callingMethodSymbol.OverriddenMethod);
-                        //callerInfos.AddRange(overridenMethods);
-                    }
                     
                     // Push the method overriden
                     var methodOverride = callingMethodSymbol;
@@ -92,18 +96,65 @@ namespace AsyncPropagation
                     
                     var methodDeclarations =
                         await Task.WhenAll(referencer.CallingSymbol.DeclaringSyntaxReferences.Select(reference =>
-                            CreateMethodSignature(reference, solution)));
+                            CreateMethodSignature(reference, solution, method.ContainingType.IsAbstract)));
                     callerInfos.AddRange(methodDeclarations);
                     var methodCalls = await Task.WhenAll(referencer.Locations.Select(l =>
                         CreateMethodCall(solution, methodDeclarations.Select(m => m.Node), l))
                     );
                     callerInfos.AddRange(methodCalls);
-                    // if (callingMethodSymbol.IsAsync || callingMethodSymbol.ReturnType.ContainingNamespace.ToDisplayString() == "System.Threading.Tasks")
-                    //     continue;
                 }
             }
 
             return callerInfos;
+        }
+
+        private static async Task<IEnumerable<INodeToChange<SyntaxNode>>> CollectInterfaceMethodsDeclarations(Solution solution, IEnumerable<INamedTypeSymbol> probableInterfaces, IMethodSymbol callingMethodSymbol)
+        {
+            var nodesToChange = new List<INodeToChange<SyntaxNode>>();
+            foreach (var probableInterface in probableInterfaces)
+            {
+                foreach (var member in probableInterface.GetMembers(callingMethodSymbol.Name))
+                {
+                    if (!(member is IMethodSymbol methodSymbol))
+                        continue;
+                    
+                    var impl = callingMethodSymbol.ContainingType.FindImplementationForInterfaceMember(methodSymbol) as IMethodSymbol;
+                    if (impl == null)
+                        continue;
+
+                    if (impl.ContainingType == callingMethodSymbol.ContainingType && impl.Equals(callingMethodSymbol))
+                    {
+                        var methodDeclarations =
+                            await Task.WhenAll(member.DeclaringSyntaxReferences.Select(reference =>
+                                CreateMethodSignature(reference, solution, true)));
+                        nodesToChange.AddRange(methodDeclarations);
+                    }
+                    else
+                    {
+                        if (HaveIntersectionInHierarchy(impl, callingMethodSymbol) ||
+                            HaveIntersectionInHierarchy(callingMethodSymbol, impl))
+                        {
+                            var methodDeclarations =
+                                await Task.WhenAll(impl.DeclaringSyntaxReferences.Select(reference =>
+                                    CreateMethodSignature(reference, solution, true)));
+                            nodesToChange.AddRange(methodDeclarations);
+                        }
+                    }
+                }
+            }
+
+            return nodesToChange;
+        }
+
+        private static bool HaveIntersectionInHierarchy(IMethodSymbol? first, IMethodSymbol second)
+        {
+            if (first == null)
+                return false;
+            
+            if (first.Equals(second))
+                return true;
+
+            return HaveIntersectionInHierarchy(first.OverriddenMethod, second);
         }
 
         private static async Task<MethodCall> CreateMethodCall(Solution solution, IEnumerable<MethodDeclarationSyntax> methodDeclarations, Location location)
@@ -129,7 +180,8 @@ namespace AsyncPropagation
         }
 
 
-        private static async Task<MethodSignature> CreateMethodSignature(SyntaxReference reference, Solution solution)
+        private static async Task<MethodSignature> CreateMethodSignature(SyntaxReference reference, Solution solution,
+            bool isInterfaceMember)
         {
             var location = reference.SyntaxTree.GetLocation(reference.Span);
             var doc = solution.GetDocument(location.SourceTree);
@@ -147,7 +199,7 @@ namespace AsyncPropagation
             if (node == null)
                 return MethodSignature.NullObject;
             
-            return new MethodSignature(doc, node);
+            return new MethodSignature(doc, node, isInterfaceMember);
         }
 
 //         private static IEnumerable<ILocation> CollectOverridenMethods(IMethodSymbol overriddenMethod)

@@ -55,7 +55,7 @@ namespace AsyncPropagation
                         newMethodSyntaxTree = newMethodSyntaxTree.ReplaceNode(trackedCall, awaitCall);
                     }
                     
-                    newMethodSyntaxTree = RewriteMethodSignature(newMethodSyntaxTree);
+                    newMethodSyntaxTree = RewriteMethodSignature(newMethodSyntaxTree, (methodDeclarationLoc as MethodSignature)!.IsInterfaceMember);
                     root = root.ReplaceNode(oldMethodSyntaxTree, newMethodSyntaxTree);
                 }
                 
@@ -65,13 +65,13 @@ namespace AsyncPropagation
             return solution;
         }
         
-        private MethodDeclarationSyntax RewriteMethodSignature(MethodDeclarationSyntax methodDeclaration)
+        private MethodDeclarationSyntax RewriteMethodSignature(MethodDeclarationSyntax methodDeclaration, bool isAbstractDeclaration)
         {
             TypeSyntax asyncReturnType;
             SyntaxTokenList methodModifiers;
 
             var modifiersStr = methodDeclaration.Modifiers.ToString(); //it's surprisingly hard to compare modifiers
-            if (modifiersStr.Contains("async") || modifiersStr.Contains("abstract"))
+            if (modifiersStr.Contains("async") || modifiersStr.Contains("abstract") || isAbstractDeclaration)
                 methodModifiers = methodDeclaration.Modifiers;
             else
                 methodModifiers = methodDeclaration.Modifiers.Add(Token(SyntaxKind.AsyncKeyword).WithTrailingTrivia(Space));
@@ -99,7 +99,9 @@ namespace AsyncPropagation
 
             methodDeclaration = methodDeclaration.WithReturnType(asyncReturnType)
                 .WithIdentifier(GetMethodName(methodDeclaration))
-                .WithModifiers(methodModifiers);
+                .WithModifiers(methodModifiers)
+                .WithLeadingTrivia(methodDeclaration.GetLeadingTrivia())
+                ;
 
             return methodDeclaration;
         }

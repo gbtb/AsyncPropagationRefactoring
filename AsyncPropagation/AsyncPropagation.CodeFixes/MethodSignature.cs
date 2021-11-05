@@ -6,14 +6,16 @@ namespace AsyncPropagation
 {
     internal class MethodSignature: INodeToChange<MethodDeclarationSyntax>, IEquatable<MethodSignature>
     {
-        internal MethodSignature(Document doc, MethodDeclarationSyntax node)
+        internal MethodSignature(Document doc, MethodDeclarationSyntax node, bool isInterfaceMember = false)
         {
             Doc = doc;
             Node = node;
+            IsInterfaceMember = isInterfaceMember;
         }
 
         public MethodDeclarationSyntax Node { get; }
-        
+        public bool IsInterfaceMember { get; }
+
         public Document Doc { get; }
 
         public static MethodSignature NullObject = new MethodSignature(null!, null!);
