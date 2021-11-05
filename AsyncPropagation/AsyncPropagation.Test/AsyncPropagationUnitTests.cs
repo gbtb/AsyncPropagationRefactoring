@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.Diagnostics;
@@ -187,14 +188,14 @@ namespace AsyncPropagation.Test
             }
 
             public class Foo1: Foo2 {
-                public override Task BarAsync()
+                public override async Task BarAsync()
                 {
                     
                 }
             }
 
             public class Foo: Foo1 {
-                public override Task BarAsync(){
+                public override async Task BarAsync(){
                     await new Test().InnerMethodAsync();
                 }
             }

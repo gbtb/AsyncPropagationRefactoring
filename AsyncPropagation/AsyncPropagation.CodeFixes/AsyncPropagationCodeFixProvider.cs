@@ -53,22 +53,18 @@ namespace AsyncPropagation
         private static async Task<HashSet<INodeToChange<SyntaxNode>>> GetMethodCallsAsync(Solution solution, IMethodSymbol startMethod,
             CancellationToken contextCancellationToken)
         {
-            //var visited = new HashSet<IMethodSymbol>();
             var methods = new Stack<IMethodSymbol>();
             var callerInfos = new HashSet<INodeToChange<SyntaxNode>>();
             methods.Push(startMethod);
-            var startMethodDeclaration =
-                await Task.WhenAll(startMethod.DeclaringSyntaxReferences.Select(reference =>
-                    CreateMethodSignature(reference, solution)));
-            callerInfos.AddRange(startMethodDeclaration);
+            
             
             while (methods.Count > 0)
             {
                 var method = methods.Pop();
-                // if (!visited.Add(method))
-                // {
-                //     continue;
-                // }
+                var methodDeclaration =
+                    await Task.WhenAll(method.DeclaringSyntaxReferences.Select(reference =>
+                        CreateMethodSignature(reference, solution)));
+                callerInfos.AddRange(methodDeclaration);
 
                 var finds = await SymbolFinder.FindCallersAsync(method, solution, contextCancellationToken);
                 foreach (var referencer in finds)

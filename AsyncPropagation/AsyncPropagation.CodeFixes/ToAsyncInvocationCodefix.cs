@@ -60,32 +60,6 @@ namespace AsyncPropagation
                 }
                 
                 solution = solution.WithDocumentSyntaxRoot(doc.Id, root);
-                
-                // foreach (var location in group)
-                // {
-                //     
-                // }
-                // var oldSolutionDoc = group.Key;
-                // if (oldSolutionDoc == null)
-                // {
-                //     //_logger.LogError("Failed to find docs for some symbols location: {Symbols}", "TODO");
-                //     continue;
-                // }
-                //
-                // var oldDocRoot = await oldSolutionDoc.GetSyntaxRootAsync();
-                // if (oldDocRoot == null)
-                // {
-                //     //_logger.LogError("Failed to get syntax root of document: {Doc}", oldSolutionDoc.Name);
-                //     continue;
-                // }
-                //
-                // var rewriter = new ToAsyncMethodRewriter(oldDocRoot, group, startMethodDoc?.Id == oldSolutionDoc.Id ? startMethodSyntaxNode : null);
-                // var newSolutionDoc = solution.GetDocument(oldSolutionDoc.Id);
-                // var newSolutionRoot = await newSolutionDoc.GetSyntaxRootAsync();
-                //
-                // var newRoot = rewriter.Visit(newSolutionRoot);
-                //
-                // solution = newSolutionDoc.WithSyntaxRoot(newRoot).Project.Solution;
             }
 
             return solution;
@@ -96,7 +70,8 @@ namespace AsyncPropagation
             TypeSyntax asyncReturnType;
             SyntaxTokenList methodModifiers;
 
-            if (methodDeclaration.Modifiers.ToString().Contains("async"))
+            var modifiersStr = methodDeclaration.Modifiers.ToString(); //it's surprisingly hard to compare modifiers
+            if (modifiersStr.Contains("async") || modifiersStr.Contains("abstract"))
                 methodModifiers = methodDeclaration.Modifiers;
             else
                 methodModifiers = methodDeclaration.Modifiers.Add(Token(SyntaxKind.AsyncKeyword).WithTrailingTrivia(Space));
@@ -167,7 +142,7 @@ namespace AsyncPropagation
                     : node.WithName(IdentifierName(node.Name + "Async")),
                 _ => throw new ArgumentOutOfRangeException()
             };
-            return AwaitExpression(newCallSite.WithExpression(newExpression))
+            return AwaitExpression(newCallSite.WithExpression(newExpression.WithoutTrivia()))
                 .WithAwaitKeyword(Token(TriviaList(Space), SyntaxKind.AwaitKeyword, TriviaList(Space)))
                 .WithLeadingTrivia(leadingTrivia);
         }
