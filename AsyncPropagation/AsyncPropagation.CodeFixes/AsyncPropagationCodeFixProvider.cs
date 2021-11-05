@@ -57,6 +57,7 @@ namespace AsyncPropagation
             var methods = new Stack<IMethodSymbol>();
             var callerInfos = new List<ILocation>();
             methods.Push(startMethod);
+            callerInfos.AddRange(startMethod.DeclaringSyntaxReferences.Select(r => new MethodSignatureLocation(r.SyntaxTree.GetLocation(r.Span))));
             
             while (methods.Count > 0)
             {
@@ -90,7 +91,7 @@ namespace AsyncPropagation
                     }
                     
                     callerInfos.AddRange(referencer.Locations.Select(l => new CallLocation(l)));
-                    callerInfos.AddRange(referencer.CallingSymbol.DeclaringSyntaxReferences.Select(l => new MethodLocation(l.SyntaxTree.GetLocation(l.Span))));
+                    callerInfos.AddRange(referencer.CallingSymbol.DeclaringSyntaxReferences.Select(l => new MethodSignatureLocation(l.SyntaxTree.GetLocation(l.Span))));
                     // if (callingMethodSymbol.IsAsync || callingMethodSymbol.ReturnType.ContainingNamespace.ToDisplayString() == "System.Threading.Tasks")
                     //     continue;
                 }
@@ -105,7 +106,7 @@ namespace AsyncPropagation
             {
                 foreach (var syntaxReference in overriddenMethod.DeclaringSyntaxReferences)
                 {
-                    yield return new MethodLocation(
+                    yield return new MethodSignatureLocation(
                         syntaxReference.SyntaxTree.GetLocation(syntaxReference.Span));
                 }
 

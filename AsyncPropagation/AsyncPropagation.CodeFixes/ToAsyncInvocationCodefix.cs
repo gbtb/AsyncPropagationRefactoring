@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
@@ -20,7 +21,6 @@ namespace AsyncPropagation
             var solution1 = solution;
             var groupByDoc = locations
                 .GroupBy(l => solution1.GetDocument(l.Location.SourceTree));
-                
 
             var startMethodSyntaxNode = startMethod.DeclaringSyntaxReferences[0].GetSyntax();
             var startMethodDoc = solution1.GetDocument(startMethodSyntaxNode.SyntaxTree);
@@ -33,37 +33,32 @@ namespace AsyncPropagation
 
                 List<(SyntaxNode OldNode, SyntaxNode NewNode)> replacePairs =
                     new List<(SyntaxNode oldNode, SyntaxNode newNode)>();
+
+                var lookup = group.ToLookup(l => l is MethodSignatureLocation);
                 
-                foreach (var location in group.OrderBy(l => l is MethodLocation))
+                foreach (var methodDeclarationLoc  in lookup[true])
                 {
-                    
-                    if (location is CallLocation)
-                    {
-                        var node = root.FindNode(location.Location.SourceSpan)
-                            .AncestorsAndSelf()
-                            .OfType<InvocationExpressionSyntax>().First();
-                        
-                        var awaitCall = _useConfigureAwait ? InvocationWithConfigureAwait(node, SyntaxTriviaList.Empty) 
-                            : InvocationWithAwait(node, SyntaxTriviaList.Empty);
-                        replacePairs.Add((node, awaitCall));
-                    }else if (location is MethodLocation)
-                    {
-                        var node = root.FindNode(location.Location.SourceSpan)
-                            .AncestorsAndSelf()
-                            .OfType<MethodDeclarationSyntax>().First();
+                    var oldMethodSyntaxTree = root.FindNode(methodDeclarationLoc.Location.SourceSpan)
+                        .AncestorsAndSelf()
+                        .OfType<MethodDeclarationSyntax>().First();
 
-                        var newDeclaration = RewriteMethodSignature(node);
-                        replacePairs.Add((node, newDeclaration));
+                    var callsToRewrite = lookup[false]
+                        .Where(n => oldMethodSyntaxTree.FullSpan.Contains(n.Location.SourceSpan))
+                        .Select(n => oldMethodSyntaxTree.FindNode(n.Location.SourceSpan)
+                            .AncestorsAndSelf()
+                            .OfType<InvocationExpressionSyntax>().First()
+                        );
+
+                    var newMethodSyntaxTree = oldMethodSyntaxTree;
+                    foreach (var call in callsToRewrite)
+                    {
+                        var awaitCall = _useConfigureAwait ? InvocationWithConfigureAwait(call, call.GetLeadingTrivia()) 
+                            : InvocationWithAwait(call, call.GetLeadingTrivia());
+                        newMethodSyntaxTree = newMethodSyntaxTree.ReplaceNode(call, awaitCall);
                     }
-                }
-
-                TypeDeclarationSyntax d = null;
-                d.AddMembers()
-
-                foreach (var pair in replacePairs)
-                {
-                    root.Wi
-                    root = root.ReplaceNode(pair.OldNode, pair.NewNode);
+                    
+                    newMethodSyntaxTree = RewriteMethodSignature(newMethodSyntaxTree);
+                    root = root.ReplaceNode(oldMethodSyntaxTree, newMethodSyntaxTree);
                 }
                 
                 solution = solution.WithDocumentSyntaxRoot(doc.Id, root);
@@ -101,11 +96,19 @@ namespace AsyncPropagation
         private MethodDeclarationSyntax RewriteMethodSignature(MethodDeclarationSyntax methodDeclaration)
         {
             TypeSyntax asyncReturnType;
+            SyntaxTokenList methodModifiers;
+
+            if (methodDeclaration.Modifiers.ToString().Contains("async"))
+                methodModifiers = methodDeclaration.Modifiers;
+            else
+                methodModifiers = methodDeclaration.Modifiers.Add(Token(SyntaxKind.AsyncKeyword).WithTrailingTrivia(Space));
+            
             if (methodDeclaration.ReturnType is PredefinedTypeSyntax voidType && voidType.Keyword.Kind() == SyntaxKind.VoidKeyword)
             {
                 asyncReturnType = IdentifierName("Task").WithTrailingTrivia(Space);
             }
-            else
+            else if ((methodDeclaration.ReturnType is IdentifierNameSyntax identifierNameSyntax && identifierNameSyntax.ToString() != "Task")
+                     || (methodDeclaration.ReturnType is GenericNameSyntax genericNameSyntax && genericNameSyntax.Identifier.ToString() != "Task"))
             {
                 var trailingTrivia = methodDeclaration.ReturnType.GetTrailingTrivia();
 
@@ -115,10 +118,14 @@ namespace AsyncPropagation
                         TypeArgumentList(
                             SingletonSeparatedList(methodDeclaration.ReturnType.WithoutTrailingTrivia()))).WithTrailingTrivia(trailingTrivia);
             }
+            else
+            {
+                asyncReturnType = methodDeclaration.ReturnType;
+            }
 
             methodDeclaration = methodDeclaration.WithReturnType(asyncReturnType)
                 .WithIdentifier(GetMethodName(methodDeclaration))
-                .WithModifiers(methodDeclaration.Modifiers.Add(Token(SyntaxKind.AsyncKeyword).WithTrailingTrivia(Space)));
+                .WithModifiers(methodModifiers);
 
             return methodDeclaration;
         }
@@ -148,7 +155,20 @@ namespace AsyncPropagation
         
         private SyntaxNode InvocationWithAwait(InvocationExpressionSyntax newCallSite, SyntaxTriviaList leadingTrivia)
         {
-            return AwaitExpression(newCallSite)
+            ExpressionSyntax newExpression = newCallSite.Expression switch
+            {
+                MemberBindingExpressionSyntax node => !_ensureAsyncPostfix || node.Name.ToString().EndsWith("Async")
+                    ? node
+                    : node.WithName(IdentifierName(node.Name + "Async")),
+                IdentifierNameSyntax node => !_ensureAsyncPostfix || node.Identifier.Text.EndsWith("Async")
+                    ? node
+                    : node.WithIdentifier(Identifier(node.Identifier.Text + "Async")),
+                MemberAccessExpressionSyntax node => !_ensureAsyncPostfix || node.Name.ToString().EndsWith("Async") ? 
+                    node 
+                    : node.WithName(IdentifierName(node.Name + "Async")),
+                _ => throw new ArgumentOutOfRangeException()
+            };
+            return AwaitExpression(newCallSite.WithExpression(newExpression))
                 .WithAwaitKeyword(Token(TriviaList(Space), SyntaxKind.AwaitKeyword, TriviaList(Space)))
                 .WithLeadingTrivia(leadingTrivia);
         }
