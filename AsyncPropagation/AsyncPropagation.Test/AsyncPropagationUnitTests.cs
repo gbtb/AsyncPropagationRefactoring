@@ -17,7 +17,7 @@ namespace AsyncPropagation.Test
             var source = @"
 public class Test {
 
-    public void [|InnerMethod|]()
+    public void InnerMethod()
     {
     }
 
@@ -43,9 +43,16 @@ public class Test {
 }
             ";
             
-            TestCodeRefactoring(source, expected);
+            TestCodeRefactoringAtLine(source, expected, 4);
+            TestCodeRefactoringAtLine(PrepareSource(expected), source, 5);
         }
-        
+
+        private string PrepareSource(string source)
+        {
+            //todo: maybe there is trivial check for namespace usage?
+            return source.Replace("using System.Threading.Tasks;\r\n", "");
+        }
+
         [Test]
         public void Test_TwoLevelDeep()
         {

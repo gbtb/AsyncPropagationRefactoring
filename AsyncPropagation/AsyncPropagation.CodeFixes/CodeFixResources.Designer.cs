@@ -61,11 +61,20 @@ namespace AsyncPropagation {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Propagate synchronous call and remove async-await.
+        /// </summary>
+        internal static string FromAsyncCodeFixTitle {
+            get {
+                return ResourceManager.GetString("FromAsyncCodeFixTitle", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Propagate async-await to method callers.
         /// </summary>
-        internal static string CodeFixTitle {
+        internal static string ToAsyncCodeFixTitle {
             get {
-                return ResourceManager.GetString("CodeFixTitle", resourceCulture);
+                return ResourceManager.GetString("ToAsyncCodeFixTitle", resourceCulture);
             }
         }
     }
