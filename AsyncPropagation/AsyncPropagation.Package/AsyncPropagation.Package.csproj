@@ -28,7 +28,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AsyncPropagation.CodeFixes\AsyncPropagation.CodeFixes.csproj" />
-    <ProjectReference Include="..\AsyncPropagation\AsyncPropagation.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -37,7 +36,6 @@
 
   <Target Name="_AddAnalyzersToOutput">
     <ItemGroup>
-      <TfmSpecificPackageFile Include="$(OutputPath)\AsyncPropagation.dll" PackagePath="analyzers/dotnet/cs" />
       <TfmSpecificPackageFile Include="$(OutputPath)\AsyncPropagation.CodeFixes.dll" PackagePath="analyzers/dotnet/cs" />
     </ItemGroup>
   </Target>

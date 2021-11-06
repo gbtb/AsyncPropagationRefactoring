@@ -1,16 +1,12 @@
-﻿using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CodeFixes;
-using Microsoft.CodeAnalysis.Diagnostics;
+﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CodeRefactorings;
 using NUnit.Framework;
 using RoslynTestKit;
 
 namespace AsyncPropagation.Test
 {
     [TestFixture]
-    public class AsyncPropagationUnitTest: CodeFixTestFixture
+    public class AsyncPropagationUnitTest: CodeRefactoringTestFixture
     {
         private string _diagId;
         private AsyncPropagationCodeFixProvider _provider;
@@ -46,7 +42,7 @@ namespace AsyncPropagation.Test
             }
             ";
             
-            TestCodeFix(source, expected, _diagId);
+            TestCodeRefactoring(source, expected);
         }
         
         [Test]
@@ -102,7 +98,7 @@ namespace AsyncPropagation.Test
             }
             ";
             
-            TestCodeFix(source, expected, _diagId);
+            TestCodeRefactoring(source, expected);
         }
         
         [Test]
@@ -144,7 +140,7 @@ namespace AsyncPropagation.Test
             }
             ";
             
-            TestCodeFix(source, expected, _diagId);
+            TestCodeRefactoring(source, expected);
         }
         
         [Test]
@@ -208,7 +204,7 @@ namespace AsyncPropagation.Test
             }
             ";
             
-            TestCodeFix(source, expected, _diagId);
+            TestCodeRefactoring(source, expected);
         }
         
         
@@ -265,23 +261,22 @@ namespace AsyncPropagation.Test
             }
             ";
             
-            TestCodeFix(source, expected, _diagId);
+            TestCodeRefactoring(source, expected);
         }
 
         protected override string LanguageName => LanguageNames.CSharp;
-        
-        protected override IReadOnlyCollection<DiagnosticAnalyzer> CreateAdditionalAnalyzers() => new[] { new AsyncPropagationAnalyzer() };
 
-        protected override CodeFixProvider CreateProvider()
+        protected override CodeRefactoringProvider CreateProvider()
         {
             return _provider;
         }
+
+        protected override bool FailWhenInputContainsErrors => false;
 
         [OneTimeSetUp]
         public void SetUp()
         {
             _provider = new AsyncPropagationCodeFixProvider();
-            _diagId = _provider.FixableDiagnosticIds.First();
         }
     }
 }

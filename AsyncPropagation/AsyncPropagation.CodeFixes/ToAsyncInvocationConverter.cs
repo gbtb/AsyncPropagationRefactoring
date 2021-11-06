@@ -10,16 +10,18 @@ using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace AsyncPropagation
 {
-    internal class ToAsyncInvocationCodefix
+    internal class ToAsyncInvocationConverter
     {
-        private readonly bool _useConfigureAwait;
+        private readonly bool _useConfigureAwait = false;
         private readonly bool _ensureAsyncPostfix = true;
 
-        internal async Task<Solution> ExecuteAsync(Solution solution, HashSet<INodeToChange<SyntaxNode>> locations,
+        internal async Task<Solution> ExecuteAsync(Solution solution, IMethodSymbol startMethod,
             CancellationToken token)
         {
+            var nodeToChange = await InvocationChainFinder.GetMethodCallsAsync(solution, startMethod, token);
+            
             //group types by doc because multiple methods can be declared in same file, and we need to do all changes in one pass
-            var groupByDoc = locations
+            var groupByDoc = nodeToChange
                 .GroupBy(l => l.Doc);
 
             foreach (var group in groupByDoc)
@@ -40,6 +42,8 @@ namespace AsyncPropagation
                 {
                     var oldMethodSyntaxTree =
                         root.GetCurrentNode((methodDeclarationLoc as MethodSignature)!.Node);
+                    if (oldMethodSyntaxTree == null)
+                        continue;
 
                     var callsToRewrite = lookup[false]
                         .OfType<MethodCall>()
@@ -51,6 +55,9 @@ namespace AsyncPropagation
                     foreach (var call in callsToRewrite)
                     {
                         var trackedCall = newMethodSyntaxTree.GetCurrentNode(call);
+                        if (trackedCall == null)
+                            continue;
+                        
                         var awaitCall = _useConfigureAwait ? InvocationWithConfigureAwait(trackedCall, trackedCall.GetLeadingTrivia()) 
                             : InvocationWithAwait(trackedCall, trackedCall.GetLeadingTrivia());
                         newMethodSyntaxTree = newMethodSyntaxTree.ReplaceNode(trackedCall, awaitCall);
@@ -77,7 +84,7 @@ namespace AsyncPropagation
             else
                 methodModifiers = methodDeclaration.Modifiers.Add(Token(SyntaxKind.AsyncKeyword).WithTrailingTrivia(Space));
             
-            if (methodDeclaration.ReturnType is PredefinedTypeSyntax voidType && voidType.Keyword.Kind() == SyntaxKind.VoidKeyword)
+            if (methodDeclaration.ReturnType is PredefinedTypeSyntax voidType && voidType.Keyword.IsKind(SyntaxKind.VoidKeyword))
             {
                 asyncReturnType = IdentifierName("Task").WithTrailingTrivia(Space);
             }

@@ -22,7 +22,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AsyncPropagation.CodeFixes\AsyncPropagation.CodeFixes.csproj" />
-    <ProjectReference Include="..\AsyncPropagation\AsyncPropagation.csproj" />
   </ItemGroup>
 
 </Project>
