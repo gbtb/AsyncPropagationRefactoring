@@ -29,6 +29,9 @@ namespace AsyncPropagation
                 var doc = group.Key;
 
                 var root = await group.First().Node.SyntaxTree.GetRootAsync(token);
+                var hasUsing = root.DescendantNodesAndSelf().OfType<CompilationUnitSyntax>()
+                    .FirstOrDefault()?.Usings.Any(u => u.Name.ToString() == "System.Threading.Tasks");
+                
                 
                 List<(SyntaxNode OldNode, SyntaxNode NewNode)> replacePairs =
                     new List<(SyntaxNode oldNode, SyntaxNode newNode)>();
@@ -66,13 +69,39 @@ namespace AsyncPropagation
                     newMethodSyntaxTree = RewriteMethodSignature(newMethodSyntaxTree, (methodDeclarationLoc as MethodSignature)!.IsInterfaceMember);
                     root = root.ReplaceNode(oldMethodSyntaxTree, newMethodSyntaxTree);
                 }
+
+                if (hasUsing != true)
+                    root = AddUsingForTask(root);
                 
                 solution = solution.WithDocumentSyntaxRoot(doc.Id, root);
             }
 
             return solution;
         }
-        
+
+        private SyntaxNode AddUsingForTask(SyntaxNode root)
+        {
+            var compilationUnitSyntax = root.DescendantNodesAndSelf().OfType<CompilationUnitSyntax>().FirstOrDefault();
+            if (compilationUnitSyntax == null)
+                return root;
+
+            var usings = compilationUnitSyntax.Usings.Add(
+                UsingDirective(
+                    QualifiedName(
+                        QualifiedName(
+                            IdentifierName("System"),
+                            IdentifierName("Threading")),
+                        IdentifierName("Tasks")))
+                .WithUsingKeyword(
+                    Token(
+                        TriviaList(),
+                        SyntaxKind.UsingKeyword,
+                        TriviaList(
+                            Space))));
+
+            return root.ReplaceNode(compilationUnitSyntax, compilationUnitSyntax.WithUsings(usings));
+        }
+
         private MethodDeclarationSyntax RewriteMethodSignature(MethodDeclarationSyntax methodDeclaration, bool isAbstractDeclaration)
         {
             TypeSyntax asyncReturnType;

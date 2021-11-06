@@ -15,31 +15,32 @@ namespace AsyncPropagation.Test
         public void Test_OneLevelDeep()
         {
             var source = @"
-            public class Test {
+public class Test {
 
-                public async Task [|InnerMethod|]()
-                {
-                }
+    public void [|InnerMethod|]()
+    {
+    }
 
-                public void OuterMethod()
-                {
-                    InnerMethod();
-                }
-            }
+    public void OuterMethod()
+    {
+        InnerMethod();
+    }
+}
             ";
             
-            var expected = @"
-            public class Test {
+            var expected = @"using System.Threading.Tasks;
 
-                public async Task InnerMethodAsync()
-                {
-                }
+public class Test {
 
-                public async Task OuterMethodAsync()
-                {
-                    await InnerMethodAsync();
-                }
-            }
+    public async Task InnerMethodAsync()
+    {
+    }
+
+    public async Task OuterMethodAsync()
+    {
+        await InnerMethodAsync();
+    }
+}
             ";
             
             TestCodeRefactoring(source, expected);
@@ -49,9 +50,11 @@ namespace AsyncPropagation.Test
         public void Test_TwoLevelDeep()
         {
             var source = @"
+            using System.Threading.Tasks;
+
             public class Test {
 
-                public async Task [|InnerMethod|]()
+                public void [|InnerMethod|]()
                 {
                 }
 
@@ -74,6 +77,8 @@ namespace AsyncPropagation.Test
             ";
             
             var expected = @"
+            using System.Threading.Tasks;
+
             public class Test {
 
                 public async Task InnerMethodAsync()
@@ -105,39 +110,40 @@ namespace AsyncPropagation.Test
         public void Test_WithInterface()
         {
             var source = @"
-            public class Test {
+public class Test {
 
-                public async Task [|InnerMethod|]()
-                {
-                }
-            }
-            public interface IFoo {
-                void Bar();
-            }
+    public void [|InnerMethod|]()
+    {
+    }
+}
+public interface IFoo {
+    void Bar();
+}
 
-            public class Foo: IFoo {
-                public void Bar(){
-                    new Test().InnerMethod();
-                }
-            }
+public class Foo: IFoo {
+    public void Bar(){
+        new Test().InnerMethod();
+    }
+}
             ";
             
-            var expected = @"
-            public class Test {
+            var expected = @"using System.Threading.Tasks;
 
-                public async Task InnerMethodAsync()
-                {
-                }
-            }
-            public interface IFoo {
-                Task BarAsync();
-            }
+public class Test {
 
-            public class Foo: IFoo {
-                public async Task BarAsync(){
-                    await new Test().InnerMethodAsync();
-                }
-            }
+    public async Task InnerMethodAsync()
+    {
+    }
+}
+public interface IFoo {
+    Task BarAsync();
+}
+
+public class Foo: IFoo {
+    public async Task BarAsync(){
+        await new Test().InnerMethodAsync();
+    }
+}
             ";
             
             TestCodeRefactoring(source, expected);
@@ -147,61 +153,62 @@ namespace AsyncPropagation.Test
         public void Test_WithInterfaceAndInheritance()
         {
             var source = @"
-            public class Test {
+public class Test {
 
-                public async string [|InnerMethod|]()
-                {
-                }
-            }
-            public interface IInterface1 {
-                string Bar();
-            }
+    public string [|InnerMethod|]()
+    {
+    }
+}
+public interface IInterface1 {
+    string Bar();
+}
 
-            public interface IInterface2: IInterface1 {
-                IInterface1 Baz();
-            }
+public interface IInterface2: IInterface1 {
+    IInterface1 Baz();
+}
 
-            public class Baz: IInterface2 {
-                public virtual string Bar() {
-                    
-                }
-            }
+public class Baz: IInterface2 {
+    public virtual string Bar() {
+        
+    }
+}
 
-            public class Foo: Baz {
-                public override string Bar(){
-                    var a = base.Bar();
-                    return new Test().InnerMethod() + a;
-                }
-            }
+public class Foo: Baz {
+    public override string Bar(){
+        var a = base.Bar();
+        return new Test().InnerMethod() + a;
+    }
+}
             ";
             
-            var expected = @"
-            public class Test {
+            var expected = @"using System.Threading.Tasks;
 
-                public async Task<string> InnerMethodAsync()
-                {
-                }
-            }
-            public interface IInterface1 {
+public class Test {
+
+    public async Task<string> InnerMethodAsync()
+    {
+    }
+}
+public interface IInterface1 {
     Task<string> BarAsync();
-            }
+}
 
-            public interface IInterface2: IInterface1 {
-                IInterface1 Baz();
-            }
+public interface IInterface2: IInterface1 {
+    IInterface1 Baz();
+}
 
-            public class Baz: IInterface2 {
-                public virtual async Task<string> BarAsync() {
-                    
-                }
-            }
+public class Baz: IInterface2 {
+    public virtual async Task<string> BarAsync() {
+        
+    }
+}
 
-            public class Foo: Baz {
-                public override async Task<string> BarAsync(){
-                    var a = await base.BarAsync();
-                    return await new Test().InnerMethodAsync() + a;
-                }
-            }
+public class Foo: Baz {
+    public override async Task<string> BarAsync(){
+        var a = await base.BarAsync();
+        return await new Test().InnerMethodAsync() + a;
+    }
+}
             ";
             
             TestCodeRefactoring(source, expected);
@@ -212,53 +219,54 @@ namespace AsyncPropagation.Test
         public void Test_WithBaseClass()
         {
             var source = @"
-            public class Test {
+public class Test {
 
-                public async Task [|InnerMethod|]()
-                {
-                }
-            }
-            public abstract class Foo2 {
-                public abstract void Bar();
-            }
+    public void [|InnerMethod|]()
+    {
+    }
+}
+public abstract class Foo2 {
+    public abstract void Bar();
+}
 
-            public class Foo1: Foo2 {
-                public override void Bar()
-                {
-                    
-                }
-            }
+public class Foo1: Foo2 {
+    public override void Bar()
+    {
+        
+    }
+}
 
-            public class Foo: Foo1 {
-                public override void Bar(){
-                    new Test().InnerMethod();
-                }
-            }
+public class Foo: Foo1 {
+    public override void Bar(){
+        new Test().InnerMethod();
+    }
+}
             ";
             
-            var expected = @"
-            public class Test {
+            var expected = @"using System.Threading.Tasks;
 
-                public async Task InnerMethodAsync()
-                {
-                }
-            }
-            public abstract class Foo2 {
-                public abstract Task BarAsync();
-            }
+public class Test {
 
-            public class Foo1: Foo2 {
-                public override async Task BarAsync()
-                {
-                    
-                }
-            }
+    public async Task InnerMethodAsync()
+    {
+    }
+}
+public abstract class Foo2 {
+    public abstract Task BarAsync();
+}
 
-            public class Foo: Foo1 {
-                public override async Task BarAsync(){
-                    await new Test().InnerMethodAsync();
-                }
-            }
+public class Foo1: Foo2 {
+    public override async Task BarAsync()
+    {
+        
+    }
+}
+
+public class Foo: Foo1 {
+    public override async Task BarAsync(){
+        await new Test().InnerMethodAsync();
+    }
+}
             ";
             
             TestCodeRefactoring(source, expected);
