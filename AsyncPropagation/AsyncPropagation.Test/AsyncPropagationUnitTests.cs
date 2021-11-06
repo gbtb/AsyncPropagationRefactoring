@@ -147,6 +147,70 @@ namespace AsyncPropagation.Test
             TestCodeFix(source, expected, _diagId);
         }
         
+        [Test]
+        public void Test_WithInterfaceAndInheritance()
+        {
+            var source = @"
+            public class Test {
+
+                public async string [|InnerMethod|]()
+                {
+                }
+            }
+            public interface IInterface1 {
+                string Bar();
+            }
+
+            public interface IInterface2: IInterface1 {
+                IInterface1 Baz();
+            }
+
+            public class Baz: IInterface2 {
+                public virtual string Bar() {
+                    
+                }
+            }
+
+            public class Foo: Baz {
+                public override string Bar(){
+                    var a = base.Bar();
+                    return new Test().InnerMethod() + a;
+                }
+            }
+            ";
+            
+            var expected = @"
+            public class Test {
+
+                public async Task<string> InnerMethodAsync()
+                {
+                }
+            }
+            public interface IInterface1 {
+    Task<string> BarAsync();
+            }
+
+            public interface IInterface2: IInterface1 {
+                IInterface1 Baz();
+            }
+
+            public class Baz: IInterface2 {
+                public virtual async Task<string> BarAsync() {
+                    
+                }
+            }
+
+            public class Foo: Baz {
+                public override async Task<string> BarAsync(){
+                    var a = await base.BarAsync();
+                    return await new Test().InnerMethodAsync() + a;
+                }
+            }
+            ";
+            
+            TestCodeFix(source, expected, _diagId);
+        }
+        
         
         [Test]
         public void Test_WithBaseClass()

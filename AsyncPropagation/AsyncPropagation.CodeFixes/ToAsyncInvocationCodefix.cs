@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -9,31 +10,31 @@ using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace AsyncPropagation
 {
-    public class ToAsyncInvocationCodefix
+    internal class ToAsyncInvocationCodefix
     {
         private readonly bool _useConfigureAwait;
         private readonly bool _ensureAsyncPostfix = true;
 
-        public async Task<Solution> ExecuteAsync(Solution solution, HashSet<INodeToChange<SyntaxNode>> locations)
+        internal async Task<Solution> ExecuteAsync(Solution solution, HashSet<INodeToChange<SyntaxNode>> locations,
+            CancellationToken token)
         {
             //group types by doc because multiple methods can be declared in same file, and we need to do all changes in one pass
-            var solution1 = solution;
             var groupByDoc = locations
                 .GroupBy(l => l.Doc);
 
             foreach (var group in groupByDoc)
             {
                 var doc = group.Key;
-                //var tree = await doc.GetSyntaxTreeAsync();
-                //var root = tree.GetRoot();
 
-                var root = await group.First().Node.SyntaxTree.GetRootAsync();
+                var root = await group.First().Node.SyntaxTree.GetRootAsync(token);
                 
                 List<(SyntaxNode OldNode, SyntaxNode NewNode)> replacePairs =
                     new List<(SyntaxNode oldNode, SyntaxNode newNode)>();
 
                 var lookup = group.ToLookup(l => l is MethodSignature);
 
+                //we will use node tracking mechanism to perform multiple changes on a doc's SyntaxTree
+                //it will allow us to mutate root children and don't lose positions of nodes we haven't yet rewrite
                 root = root.TrackNodes(group.Select(n => n.Node));
                 foreach (var methodDeclarationLoc  in lookup[true])
                 {
@@ -90,14 +91,14 @@ namespace AsyncPropagation
                         Identifier("Task"))
                     .WithTypeArgumentList(
                         TypeArgumentList(
-                            SingletonSeparatedList(methodDeclaration.ReturnType.WithoutTrailingTrivia()))).WithTrailingTrivia(trailingTrivia);
+                            SingletonSeparatedList(methodDeclaration.ReturnType.WithoutTrivia()))).WithTrailingTrivia(trailingTrivia);
             }
             else
             {
                 asyncReturnType = methodDeclaration.ReturnType;
             }
 
-            methodDeclaration = methodDeclaration.WithReturnType(asyncReturnType)
+            methodDeclaration = methodDeclaration.WithReturnType(asyncReturnType.WithLeadingTrivia())
                 .WithIdentifier(GetMethodName(methodDeclaration))
                 .WithModifiers(methodModifiers)
                 .WithLeadingTrivia(methodDeclaration.GetLeadingTrivia())
