@@ -61,7 +61,7 @@ public class Test {
 
             public class Test {
 
-                public void [|InnerMethod|]()
+                public void InnerMethod()
                 {
                 }
 
@@ -110,7 +110,8 @@ public class Test {
             }
             ";
             
-            TestCodeRefactoring(source, expected);
+            TestCodeRefactoringAtLine(source, expected, 6);
+            TestCodeRefactoringAtLine(expected, source, 6);
         }
         
         [Test]
@@ -119,7 +120,7 @@ public class Test {
             var source = @"
 public class Test {
 
-    public void [|InnerMethod|]()
+    public void InnerMethod()
     {
     }
 }
@@ -153,7 +154,8 @@ public class Foo: IFoo {
 }
             ";
             
-            TestCodeRefactoring(source, expected);
+            TestCodeRefactoringAtLine(source, expected, 4);
+            TestCodeRefactoringAtLine(PrepareSource(expected), source, 5);
         }
         
         [Test]
@@ -162,7 +164,7 @@ public class Foo: IFoo {
             var source = @"
 public class Test {
 
-    public string [|InnerMethod|]()
+    public string InnerMethod()
     {
     }
 }
@@ -218,7 +220,8 @@ public class Foo: Baz {
 }
             ";
             
-            TestCodeRefactoring(source, expected);
+            TestCodeRefactoringAtLine(source, expected, 4);
+            TestCodeRefactoringAtLine(PrepareSource(expected), source, 5);
         }
         
         
@@ -228,7 +231,7 @@ public class Foo: Baz {
             var source = @"
 public class Test {
 
-    public void [|InnerMethod|]()
+    public void InnerMethod()
     {
     }
 }
@@ -276,7 +279,8 @@ public class Foo: Foo1 {
 }
             ";
             
-            TestCodeRefactoring(source, expected);
+            TestCodeRefactoringAtLine(source, expected, 4);
+            TestCodeRefactoringAtLine(PrepareSource(expected) ,source, 5);
         }
 
         protected override string LanguageName => LanguageNames.CSharp;

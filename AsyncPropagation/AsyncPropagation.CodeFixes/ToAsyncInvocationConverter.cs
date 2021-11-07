@@ -18,7 +18,8 @@ namespace AsyncPropagation
         internal async Task<Solution> ExecuteAsync(Solution solution, IMethodSymbol startMethod,
             CancellationToken token)
         {
-            var nodeToChange = await InvocationChainFinder.GetMethodCallsAsync(solution, startMethod, token);
+            var invocationChainFinder = new InvocationChainFinder(new ToAsyncSearchMethods());
+            var nodeToChange = await invocationChainFinder.GetMethodCallsAsync(solution, startMethod, token);
             
             //group types by doc because multiple methods can be declared in same file, and we need to do all changes in one pass
             var groupByDoc = nodeToChange

@@ -10,6 +10,13 @@ namespace AsyncPropagation
 {
     public class InvocationChainFinder
     {
+        private readonly ISearchMethods _searchMethods;
+
+        public InvocationChainFinder(ISearchMethods searchMethods)
+        {
+            _searchMethods = searchMethods;
+        }
+
         /// <summary>
         /// Collects all SyntaxNodes which requires transformation (callsites and methods declarations)
         /// </summary>
@@ -17,7 +24,7 @@ namespace AsyncPropagation
         /// <param name="startMethod">Start method</param>
         /// <param name="token"></param>
         /// <returns>Set of nodes to change</returns>
-        internal static async Task<HashSet<INodeToChange<SyntaxNode>>> GetMethodCallsAsync(Solution solution, IMethodSymbol startMethod,
+        internal async Task<HashSet<INodeToChange<SyntaxNode>>> GetMethodCallsAsync(Solution solution, IMethodSymbol startMethod,
             CancellationToken token)
         {
             var methods = new Stack<IMethodSymbol>();
@@ -40,16 +47,13 @@ namespace AsyncPropagation
                 foreach (var referencer in finds)
                 {
                     var callingMethodSymbol = (IMethodSymbol)referencer.CallingSymbol;
-                    if (!callingMethodSymbol.IsAsync && callingMethodSymbol.ReturnType.ContainingNamespace.ToDisplayString() != "System.Threading.Tasks")
+                    if (_searchMethods.ShouldSearchForCallers(callingMethodSymbol))
                         methods.Push(callingMethodSymbol);
 
                     var probableInterfaces = callingMethodSymbol.ContainingType
                         .AllInterfaces.Where(interf => interf.MemberNames.Contains(callingMethodSymbol.Name));
                     
                     callerInfos.AddRange(await CollectInterfaceMethodsDeclarations(solution, probableInterfaces, callingMethodSymbol));
-                    
-                    //var impl = callingMethodSymbol.ContainingType.FindImplementationForInterfaceMember(callingMethodSymbol);
-                        //var overridenMethods = CollectOverridenMethods(callingMethodSymbol.OverriddenMethod);
                     
                     // Push the method overriden
                     var methodOverride = callingMethodSymbol;
@@ -187,5 +191,10 @@ namespace AsyncPropagation
             
             return new MethodSignature(doc, node, isInterfaceMember);
         }
+    }
+
+    public interface ISearchMethods
+    {
+        bool ShouldSearchForCallers(IMethodSymbol callingMethodSymbol);
     }
 }
