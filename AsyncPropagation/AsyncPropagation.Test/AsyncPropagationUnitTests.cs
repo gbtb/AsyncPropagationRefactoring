@@ -282,6 +282,69 @@ public class Foo: Foo1 {
             TestCodeRefactoringAtLine(source, expected, 4);
             TestCodeRefactoringAtLine(PrepareSource(expected) ,source, 5);
         }
+        
+        [Test]
+        public void Test_TwoLevelDeep_WithTopLevelAlreadyAsync()
+        {
+            var source = @"
+            using System.Threading.Tasks;
+
+            public class Test {
+
+                public void InnerMethod()
+                {
+                }
+
+                public int OuterMethod(int i)
+                {
+                    InnerMethod();
+                    return i + 1;
+                }
+
+                private async Task<int> TopLevelMethodAsync()
+                {
+                    if (OuterMethod(2) == 3){
+                        return 0    
+                    }else {
+                        InnerMethod();
+                    }
+                    
+                    await Task.Delay(100);
+                }
+            }
+            ";
+            
+            var expected = @"
+            using System.Threading.Tasks;
+
+            public class Test {
+
+                public async Task InnerMethodAsync()
+                {
+                }
+
+                public async Task<int> OuterMethodAsync(int i)
+                {
+                    await InnerMethodAsync();
+                    return i + 1;
+                }
+
+                private async Task<int> TopLevelMethodAsync()
+                {
+                    if (await OuterMethodAsync(2) == 3){
+                        return 0    
+                    }else {
+                        await InnerMethodAsync();
+                    }
+                    
+                    await Task.Delay(100);
+                }
+            }
+            ";
+            
+            TestCodeRefactoringAtLine(source, expected, 6);
+            TestCodeRefactoringAtLine(expected, source, 6);
+        }
 
         protected override string LanguageName => LanguageNames.CSharp;
 

@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using AsyncPropagation.Model;
+using AsyncPropagation.Shared;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
-namespace AsyncPropagation
+namespace AsyncPropagation.ToSync
 {
     internal class ToSyncInvocationConverter
     {
@@ -63,8 +65,10 @@ namespace AsyncPropagation
                         var newCall = CreateNewCall(trackedCall, nodeToReplace.GetLeadingTrivia());
                         newMethodSyntaxTree = newMethodSyntaxTree.ReplaceNode(nodeToReplace, newCall);
                     }
-                    
-                    newMethodSyntaxTree = RewriteMethodSignature(newMethodSyntaxTree, (methodDeclarationLoc as MethodSignature)!.IsInterfaceMember);
+
+                    var decl = (methodDeclarationLoc as MethodSignature)!;
+                    if (!decl.KeepUntouched)
+                        newMethodSyntaxTree = RewriteMethodSignature(newMethodSyntaxTree, decl.IsInterfaceMember);
                     root = root.ReplaceNode(oldMethodSyntaxTree, newMethodSyntaxTree);
                 }
 

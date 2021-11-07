@@ -2,17 +2,19 @@
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using AsyncPropagation.Model;
+using AsyncPropagation.Utils;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.FindSymbols;
 
-namespace AsyncPropagation
+namespace AsyncPropagation.Shared
 {
-    public class InvocationChainFinder
+    internal class InvocationChainFinder
     {
         private readonly ISearchMethods _searchMethods;
 
-        public InvocationChainFinder(ISearchMethods searchMethods)
+        internal InvocationChainFinder(ISearchMethods searchMethods)
         {
             _searchMethods = searchMethods;
         }
@@ -27,39 +29,39 @@ namespace AsyncPropagation
         internal async Task<HashSet<INodeToChange<SyntaxNode>>> GetMethodCallsAsync(Solution solution, IMethodSymbol startMethod,
             CancellationToken token)
         {
-            var methods = new Stack<IMethodSymbol>();
+            var methods = new Queue<IMethodSymbol>();
             var callerInfos = new HashSet<INodeToChange<SyntaxNode>>();
-            methods.Push(startMethod);
+            methods.Enqueue(startMethod);
             var visited = new HashSet<IMethodSymbol>(SymbolEqualityComparer.Default);
+            //This adhoc traversal algorithm definitely has some flaws, such as multiple visits of nodes and undefined ordering of visits.
+            //Because of that our await-counting method for ToSync conversion is not robust, but hopefully it will work in most cases.
             
             while (methods.Count > 0)
             {
-                var method = methods.Pop();
+                var method = methods.Dequeue();
                 if (visited.Contains(method))
                     continue;
                 
                 var methodDeclaration =
                     await Task.WhenAll(method.DeclaringSyntaxReferences.Select(reference =>
                         CreateMethodSignature(reference, solution, method.ContainingType.IsAbstract)));
-                callerInfos.AddRange(methodDeclaration);
+                callerInfos.ReplaceRange(methodDeclaration);
 
                 var finds = await SymbolFinder.FindCallersAsync(method, solution, token);
                 foreach (var referencer in finds)
                 {
                     var callingMethodSymbol = (IMethodSymbol)referencer.CallingSymbol;
-                    if (_searchMethods.ShouldSearchForCallers(callingMethodSymbol))
-                        methods.Push(callingMethodSymbol);
 
                     var probableInterfaces = callingMethodSymbol.ContainingType
                         .AllInterfaces.Where(interf => interf.MemberNames.Contains(callingMethodSymbol.Name));
                     
-                    callerInfos.AddRange(await CollectInterfaceMethodsDeclarations(solution, probableInterfaces, callingMethodSymbol));
+                    callerInfos.ReplaceRange(await CollectInterfaceMethodsDeclarations(solution, probableInterfaces, callingMethodSymbol));
                     
                     // Push the method overriden
                     var methodOverride = callingMethodSymbol;
                     while (methodOverride != null && methodOverride.IsOverride && methodOverride.OverriddenMethod != null)
                     {
-                        methods.Push(methodOverride.OverriddenMethod);
+                        methods.Enqueue(methodOverride.OverriddenMethod);
                         methodOverride = methodOverride.OverriddenMethod;
                     }
 
@@ -71,11 +73,27 @@ namespace AsyncPropagation
                     var methodDeclarations =
                         await Task.WhenAll(referencer.CallingSymbol.DeclaringSyntaxReferences.Select(reference =>
                             CreateMethodSignature(reference, solution, method.ContainingType.IsAbstract)));
-                    callerInfos.AddRange(methodDeclarations);
+                    
+                    
                     var methodCalls = await Task.WhenAll(referencer.Locations.Select(l =>
-                        CreateMethodCall(solution, methodDeclarations.Select(m => m.Node), l))
+                        _searchMethods.CreateMethodCallAsync(solution, referencer.CallingSymbol, methodDeclarations.Select(m => m.Node), l))
                     );
-                    callerInfos.AddRange(methodCalls);
+                    callerInfos.ReplaceRange(methodCalls);
+
+                    if (_searchMethods.ShouldSearchForCallers(callingMethodSymbol,
+                        methodDeclarations.Select(m => m.Node)))
+                    {
+                        callerInfos.ReplaceRange(methodDeclarations);
+                        methods.Enqueue(callingMethodSymbol);
+                    }
+                    else
+                    {
+                        callerInfos.ReplaceRange(methodDeclarations.Select(m =>
+                        {
+                            m.KeepUntouched = true;
+                            return m;
+                        }));
+                    }
                 }
 
                 visited.Add(method);
@@ -147,29 +165,6 @@ namespace AsyncPropagation
             return HaveIntersectionInHierarchy(first.OverriddenMethod, second);
         }
 
-        private static async Task<MethodCall> CreateMethodCall(Solution solution, IEnumerable<MethodDeclarationSyntax> methodDeclarations, Location location)
-        {
-            var doc = solution.GetDocument(location.SourceTree);
-            if (doc == null)
-                return MethodCall.NullObject;
-
-            var root = await doc.GetSyntaxRootAsync();
-            if (root == null)
-                return MethodCall.NullObject;
-                    
-            var invocation = methodDeclarations.Where(decl => decl.FullSpan.Contains(location.SourceSpan))
-            .Select(decl => (decl.FindNode(location.SourceSpan)
-                .AncestorsAndSelf()
-                .OfType<InvocationExpressionSyntax>().First(), decl)
-            ).FirstOrDefault();
-            
-            if (invocation.Item1 == null)
-                return MethodCall.NullObject;
-
-            return new MethodCall(doc, invocation.Item1, invocation.decl);
-        }
-
-
         private static async Task<MethodSignature> CreateMethodSignature(SyntaxReference reference, Solution solution,
             bool isInterfaceMember)
         {
@@ -191,10 +186,5 @@ namespace AsyncPropagation
             
             return new MethodSignature(doc, node, isInterfaceMember);
         }
-    }
-
-    public interface ISearchMethods
-    {
-        bool ShouldSearchForCallers(IMethodSymbol callingMethodSymbol);
     }
 }

@@ -2,26 +2,27 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace AsyncPropagation
+namespace AsyncPropagation.Model
 {
-    internal class MethodCall : INodeToChange<InvocationExpressionSyntax>, IEquatable<MethodCall>
+    internal class MethodSignature: INodeToChange<MethodDeclarationSyntax>, IEquatable<MethodSignature>
     {
-        internal MethodCall(Document doc, InvocationExpressionSyntax node, MethodDeclarationSyntax containingMethod)
+        internal MethodSignature(Document doc, MethodDeclarationSyntax node, bool isInterfaceMember = false, bool keepUntouched = false)
         {
             Doc = doc;
             Node = node;
-            ContainingMethod = containingMethod;
+            IsInterfaceMember = isInterfaceMember;
+            KeepUntouched = keepUntouched;
         }
 
-        public InvocationExpressionSyntax Node { get; }
-
-        public MethodDeclarationSyntax ContainingMethod { get; }
+        public MethodDeclarationSyntax Node { get; }
+        public bool IsInterfaceMember { get; }
+        public bool KeepUntouched { get; set; }
 
         public Document Doc { get; }
+
+        public static MethodSignature NullObject = new MethodSignature(null!, null!);
         
-        public static MethodCall NullObject => new MethodCall(null!, null!, null!);
-        
-        public bool Equals(MethodCall? other)
+        public bool Equals(MethodSignature? other)
         {
             if (ReferenceEquals(null, other)) return false;
             if (ReferenceEquals(this, other)) return true;
@@ -33,7 +34,7 @@ namespace AsyncPropagation
             if (ReferenceEquals(null, obj)) return false;
             if (ReferenceEquals(this, obj)) return true;
             if (obj.GetType() != this.GetType()) return false;
-            return Equals((MethodCall)obj);
+            return Equals((MethodSignature)obj);
         }
 
         public override int GetHashCode()
@@ -41,12 +42,12 @@ namespace AsyncPropagation
             return Node.GetHashCode();
         }
 
-        public static bool operator ==(MethodCall? left, MethodCall? right)
+        public static bool operator ==(MethodSignature? left, MethodSignature? right)
         {
             return Equals(left, right);
         }
 
-        public static bool operator !=(MethodCall? left, MethodCall? right)
+        public static bool operator !=(MethodSignature? left, MethodSignature? right)
         {
             return !Equals(left, right);
         }

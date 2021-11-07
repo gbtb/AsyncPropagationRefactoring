@@ -1,6 +1,6 @@
 ﻿using Microsoft.CodeAnalysis;
 
-namespace AsyncPropagation
+namespace AsyncPropagation.Model
 {
     public interface INodeToChange<out TNode> where TNode: SyntaxNode
     {

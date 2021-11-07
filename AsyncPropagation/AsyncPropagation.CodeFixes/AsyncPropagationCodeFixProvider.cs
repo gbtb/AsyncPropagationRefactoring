@@ -5,6 +5,8 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.FindSymbols;
 using System.Linq;
 using System.Threading.Tasks;
+using AsyncPropagation.ToAsync;
+using AsyncPropagation.ToSync;
 using Microsoft.CodeAnalysis.CodeRefactorings;
 
 namespace AsyncPropagation

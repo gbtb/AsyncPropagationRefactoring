@@ -61,7 +61,7 @@ namespace AsyncPropagation {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Propagate synchronous call and remove async-await.
+        ///   Looks up a localized string similar to Remove async-await and propagate changes to callers.
         /// </summary>
         internal static string FromAsyncCodeFixTitle {
             get {
@@ -70,7 +70,7 @@ namespace AsyncPropagation {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Propagate async-await to method callers.
+        ///   Looks up a localized string similar to Make method async and propagate to callers.
         /// </summary>
         internal static string ToAsyncCodeFixTitle {
             get {
