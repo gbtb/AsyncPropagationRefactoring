@@ -44,7 +44,7 @@ jobs:
       - attach_workspace: 
           at: .
       - run:
-          dotnet nuget push --source "${NUGET_FEED_URL}" --api-key="${NUGET_KEY}" *.nupkg
+          dotnet nuget push --source "${NUGET_FEED_URL}" --api-key="${NUGET_KEY}" nupkg/*.nupkg
           
   
 workflows:
