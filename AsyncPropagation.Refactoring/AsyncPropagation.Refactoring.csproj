@@ -2,11 +2,28 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <IsPackable>false</IsPackable>
+    <IsPackable>true</IsPackable>
     <RootNamespace>AsyncPropagation</RootNamespace>
     <LangVersion>8</LangVersion>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  
+  <PropertyGroup>
+    <PackageOutputPath>./nupkg</PackageOutputPath>
+    <Description>Roslyn Code Refactoring, which provides sync to async method conversion with propagation across method call-chain and inheritance chain. 
+      Also supports reverse async to sync conversion
+    </Description>
+
+    <PackageId>AsyncPropagationRefactoring</PackageId>
+    <PackageProjectUrl>https://github.com/gbtb/AsyncPropagationRefactoring</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/gbtb/AsyncPropagationRefactoring</RepositoryUrl>
+    <Copyright>Copyright (c) gbtb 2021</Copyright>
+    <RepositoryType>git</RepositoryType>
+    <Version>0.2.0</Version>
+    <Authors>gbtb</Authors>
+    <PackageTags>roslyn refactoring async await omnisharp vs</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
