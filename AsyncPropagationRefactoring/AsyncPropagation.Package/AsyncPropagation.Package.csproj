@@ -27,7 +27,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\AsyncPropagation.CodeFixes\AsyncPropagation.CodeFixes.csproj" />
+    <ProjectReference Include="..\AsyncPropagation.Refactoring\AsyncPropagation.Refactoring.csproj" />
   </ItemGroup>
 
   <ItemGroup>
