@@ -27,3 +27,6 @@ omnisharp.json can be placed at the root of your solution, or globally into `%US
 After reloading OmniSharp you can use refactoring on methods through `ctrl+.` context menu.
 
 ### Visual Studio
+#### Per-project installation
+Visual Studio have support for loading refactorings from assemblies, added to project. 
+This way, AsyncPropagationRefactoring nuget package can be installed into project and become available through `ctrl+.` context menu **for this project**.

@@ -22,17 +22,17 @@ jobs:
             dotnet test
 
       - run:
-          working_directory: AsyncPropagation.Refactoring
+          working_directory: AsyncPropagation.Package
           name: Pack roslyn code-refactoring
           command: |
-            dotnet pack -c release
+            dotnet build -c release
 
       - store_artifacts:
-          path: AsyncPropagation.Refactoring/nupkg
+          path: AsyncPropagation.Package/nupkg
           destination: nuget_package
           
       - persist_to_workspace:
-          root: AsyncPropagation.Refactoring
+          root: AsyncPropagation.Package
           paths:
             - nupkg
   
